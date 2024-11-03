@@ -15,10 +15,14 @@ mod switch;
 mod task;
 
 use crate::config::MAX_APP_NUM;
+/// 引入系统调用的最大数量
+use crate::config::MAX_SYSCALL_NUM;
 use crate::loader::{get_num_app, init_app_cx};
 use crate::sync::UPSafeCell;
 use lazy_static::*;
 use switch::__switch;
+/// 引入获取时间的函数,注意题目要求是毫秒级别
+use crate::timer::get_time_ms;
 pub use task::{TaskControlBlock, TaskStatus};
 
 pub use context::TaskContext;
@@ -54,6 +58,11 @@ lazy_static! {
         let mut tasks = [TaskControlBlock {
             task_cx: TaskContext::zero_init(),
             task_status: TaskStatus::UnInit,
+            // 因为更改了 TaskControlBlock 结构体，
+            // 所以需要初始化 task_first_start_time 
+            // 和 syscall_times
+            task_first_start_time: 0,
+            syscall_times: [0; MAX_SYSCALL_NUM],
         }; MAX_APP_NUM];
         for (i, task) in tasks.iter_mut().enumerate() {
             task.task_cx = TaskContext::goto_restore(init_app_cx(i));
@@ -80,6 +89,8 @@ impl TaskManager {
         let mut inner = self.inner.exclusive_access();
         let task0 = &mut inner.tasks[0];
         task0.task_status = TaskStatus::Running;
+        // 记录任务的首次调用时间
+        task0.task_first_start_time = get_time_ms();
         let next_task_cx_ptr = &task0.task_cx as *const TaskContext;
         drop(inner);
         let mut _unused = TaskContext::zero_init();
@@ -122,6 +133,8 @@ impl TaskManager {
             let mut inner = self.inner.exclusive_access();
             let current = inner.current_task;
             inner.tasks[next].task_status = TaskStatus::Running;
+            // 记录任务的首次调用时间
+            inner.tasks[next].task_first_start_time = get_time_ms();
             inner.current_task = next;
             let current_task_cx_ptr = &mut inner.tasks[current].task_cx as *mut TaskContext;
             let next_task_cx_ptr = &inner.tasks[next].task_cx as *const TaskContext;
@@ -135,6 +148,35 @@ impl TaskManager {
             panic!("All applications completed!");
         }
     }
+
+    /// 获取当前的任务状态
+    fn get_current_task_status(&self) -> TaskStatus {
+        let inner = self.inner.exclusive_access();
+        inner.tasks[inner.current_task].task_status
+    }
+
+    /// 记录当前任务的系统调用次数
+    fn record_current_task_syscall_times(&self, syscall_id: usize) {
+        let mut inner = self.inner.exclusive_access();
+        // 这里因为是基础类型所以直接拷贝
+        let current = inner.current_task;
+        // 这边因为修改了所以用的是可变引用
+        // 在同一时间,如果有一个可变引用,就不能有其他引用,包括不可变引用
+        inner.tasks[current].syscall_times[syscall_id] += 1;
+    }
+
+    /// 获取当前任务的系统调用次数
+    fn get_current_task_syscall_times(&self) -> [u32; MAX_SYSCALL_NUM] {
+        let inner = self.inner.exclusive_access();
+        inner.tasks[inner.current_task].syscall_times
+    }
+
+    /// 获取当前的任务起始时间
+    fn get_current_task_first_start_time(&self) -> usize {
+        let inner = self.inner.exclusive_access();
+        inner.tasks[inner.current_task].task_first_start_time
+    }
+
 }
 
 /// Run the first task in task list.
@@ -156,6 +198,26 @@ fn mark_current_suspended() {
 /// Change the status of current `Running` task into `Exited`.
 fn mark_current_exited() {
     TASK_MANAGER.mark_current_exited();
+}
+
+/// 获取当前的任务状态
+pub fn get_current_task_status() -> TaskStatus {
+    TASK_MANAGER.get_current_task_status()
+}
+
+/// 记录当前任务的系统调用次数
+pub fn record_current_task_syscall_times(syscall_id: usize) {
+    TASK_MANAGER.record_current_task_syscall_times(syscall_id);
+}
+
+/// 获取当前任务的系统调用次数
+pub fn get_current_task_syscall_times() -> [u32; MAX_SYSCALL_NUM] {
+    TASK_MANAGER.get_current_task_syscall_times()
+}
+
+/// 获取当前的任务起始时间
+pub fn get_current_task_first_start_time() -> usize {
+    TASK_MANAGER.get_current_task_first_start_time()
 }
 
 /// Suspend the current 'Running' task and run the next task in task list.
