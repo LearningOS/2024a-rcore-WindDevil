@@ -24,7 +24,7 @@ bitflags! {
 /// page table entry structure
 pub struct PageTableEntry {
     /// bits of page table entry
-    pub bits: usize,
+    pub bits: usize, // 在64位平台上,usize是64位的,等于u64
 }
 
 impl PageTableEntry {
