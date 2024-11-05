@@ -87,7 +87,7 @@ pub fn sys_task_info(_ti: *mut TaskInfo) -> isize {
     //? const裸指针可以转换为任何类型
     let mut src = src as usize;
     //* 奇妙的跳过不允许直接转换的操作 */
-    let dst_vec = translated_byte_buffer(current_user_token(), _ti as *const u8, core::mem::size_of::<TimeVal>());
+    let dst_vec = translated_byte_buffer(current_user_token(), _ti as *const u8, core::mem::size_of::<TaskInfo>());
     for dst in dst_vec {
         unsafe {
             core::ptr::copy_nonoverlapping(src as *mut u8, dst.as_mut_ptr(), dst.len());
