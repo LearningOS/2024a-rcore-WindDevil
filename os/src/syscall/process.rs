@@ -2,9 +2,10 @@
 use crate::{
     config::MAX_SYSCALL_NUM, 
     mm::translated_byte_buffer, 
-    task::{
-        change_program_brk, current_user_token, exit_current_and_run_next, suspend_current_and_run_next, TaskStatus
-    }, timer::get_time_us
+    // 这里为了方便，直接引入了task模块的所有内容
+    task::*,
+    // 这里也需要引入get_time_ms
+    timer::{get_time_us,get_time_ms},
 };
 
 #[repr(C)]
@@ -64,12 +65,36 @@ pub fn sys_get_time(_ts: *mut TimeVal, _tz: usize) -> isize {
     0
 }
 
+/// 记录当前任务的系统调用次数
+pub fn sys_record_syscall(syscall_id: usize) -> isize {
+    trace!("kernel: sys_record_syscall, syscall_id={}", syscall_id);
+    record_current_task_syscall_times(syscall_id);
+    0
+}
+
 /// YOUR JOB: Finish sys_task_info to pass testcases
 /// HINT: You might reimplement it with virtual memory management.
 /// HINT: What if [`TaskInfo`] is splitted by two pages ?
 pub fn sys_task_info(_ti: *mut TaskInfo) -> isize {
-    trace!("kernel: sys_task_info NOT IMPLEMENTED YET!");
-    -1
+    let task_info = TaskInfo {
+        status: get_current_task_status(),
+        syscall_times: get_current_task_syscall_times(),
+        time: get_time_ms() - get_current_task_first_start_time(),
+    };
+    //* 奇妙的跳过不允许直接转换的操作 */
+    //? 从ref只能转换为自己类型的const裸指针 
+    let src = &task_info as *const TaskInfo;
+    //? const裸指针可以转换为任何类型
+    let mut src = src as usize;
+    //* 奇妙的跳过不允许直接转换的操作 */
+    let dst_vec = translated_byte_buffer(current_user_token(), _ti as *const u8, core::mem::size_of::<TimeVal>());
+    for dst in dst_vec {
+        unsafe {
+            core::ptr::copy_nonoverlapping(src as *mut u8, dst.as_mut_ptr(), dst.len());
+            src += dst.len();
+        }
+    }
+    0
 }
 
 // YOUR JOB: Implement mmap.
