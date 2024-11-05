@@ -1,11 +1,14 @@
 //! Process management syscalls
+
+
 use crate::{
-    config::MAX_SYSCALL_NUM, 
-    mm::translated_byte_buffer, 
+    // 引入页大小和最大系统调用数
+    config::{MAX_SYSCALL_NUM, PAGE_SIZE}, 
+    mm::{translated_byte_buffer, MapPermission, VirtAddr},
     // 这里为了方便，直接引入了task模块的所有内容
     task::*,
     // 这里也需要引入get_time_ms
-    timer::{get_time_us,get_time_ms},
+    timer::{get_time_ms, get_time_us},
 };
 
 #[repr(C)]
@@ -97,10 +100,25 @@ pub fn sys_task_info(_ti: *mut TaskInfo) -> isize {
     0
 }
 
-// YOUR JOB: Implement mmap.
+//* 申请长度为 len 字节的物理内存（不要求实际物理内存位置，可以随便找一块），将其映射到 start 开始的虚存，内存页属性为 port
+//* @_start 需要映射的虚存起始地址，要求按页对齐
+//* @_len 映射字节长度，可以为 0
+//* @_port 第 0 位表示是否可读，第 1 位表示是否可写，第 2 位表示是否可执行。其他位无效且必须为 0
+//* @return 成功返回 0，失败返回 -1
 pub fn sys_mmap(_start: usize, _len: usize, _port: usize) -> isize {
-    trace!("kernel: sys_mmap NOT IMPLEMENTED YET!");
-    -1
+    if _start % PAGE_SIZE != 0 ||
+        _port & !0x07 == 0 ||
+        _port & 0x07 == 0 {
+        return -1;
+    }
+    // 这里使用from_bits_truncate是因为我们的flag中有未知的bit,所以不能使用from_bits
+    let permission = MapPermission::from_bits_truncate((_port<<1) as u8)|MapPermission::U;
+    // 创建一个新的内存区域
+    let start_vpn = VirtAddr::from(_start).floor();
+    let end_vpn = VirtAddr::from(_start + _len).ceil();
+    
+
+    0
 }
 
 // YOUR JOB: Implement munmap.

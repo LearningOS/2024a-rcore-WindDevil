@@ -17,6 +17,8 @@ mod task;
 /// 引入系统调用的最大数量
 use crate::config::MAX_SYSCALL_NUM;
 use crate::loader::{get_app_data, get_num_app};
+/// 引入页表项和虚拟页号
+use crate::mm::{VirtPageNum,PageTableEntry};
 use crate::sync::UPSafeCell;
 /// 引入获取时间的函数,注意题目要求是毫秒级别
 use crate::timer::get_time_ms;
@@ -191,6 +193,13 @@ impl TaskManager {
         let inner = self.inner.exclusive_access();
         inner.tasks[inner.current_task].task_first_start_time
     }
+
+    /// 用当前任务的页表翻译页表项
+    fn get_current_task_pte(&self,vpn:VirtPageNum) -> Option<PageTableEntry> {
+        let inner = self.inner.exclusive_access();
+        inner.tasks[inner.current_task].memory_set.translate(vpn)
+    }
+
 }
 
 /// Run the first task in task list.
@@ -232,6 +241,11 @@ pub fn get_current_task_syscall_times() -> [u32; MAX_SYSCALL_NUM] {
 /// 获取当前的任务起始时间
 pub fn get_current_task_first_start_time() -> usize {
     TASK_MANAGER.get_current_task_first_start_time()
+}
+
+/// 获取当前任务的页表
+pub fn get_current_task_page_table() -> &'static PageTable {
+
 }
 
 /// Suspend the current 'Running' task and run the next task in task list.
