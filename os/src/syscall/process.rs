@@ -123,8 +123,7 @@ pub fn sys_mmap(_start: usize, _len: usize, _port: usize) -> isize {
     let end_vpn = VirtAddr::from(_start + _len).ceil();
     // 调用task模块的函数
     //* [start, start + len) 中存在已经被映射的页 */
-    create_new_map_area(start_vpn, end_vpn, permission);
-    0
+    create_new_map_area(start_vpn, end_vpn, permission)
 }
 
 // YOUR JOB: Implement munmap.
