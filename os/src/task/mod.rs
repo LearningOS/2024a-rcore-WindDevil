@@ -221,6 +221,23 @@ impl TaskManager {
         0
     }
 
+    /// 释放一个连续内存区域
+    fn remove_map_area(&self, start_vpn: VirtPageNum, end_vpn: VirtPageNum) -> isize {
+        let mut inner = self.inner.exclusive_access();
+        let current = inner.current_task;
+        let page_table = inner.tasks[current].memory_set.get_page_table();
+        let vpn_range = VPNRange::new(start_vpn, end_vpn);
+        for vpn in vpn_range {
+            if let Some(pte) = page_table.translate(vpn) {
+                if !pte.is_valid() {
+                   return -1;
+                }
+                page_table.unmap(vpn);
+            }
+        }
+        0
+    }
+
 }
 
 /// Run the first task in task list.
@@ -267,6 +284,11 @@ pub fn get_current_task_first_start_time() -> usize {
 /// 创建一个新的连续内存区域
 pub fn create_new_map_area(start_vpn: VirtPageNum, end_vpn: VirtPageNum, permission:MapPermission) -> isize {
     TASK_MANAGER.create_new_map_area(start_vpn, end_vpn, permission)
+}
+
+/// 释放一个连续内存区域
+pub fn remove_map_area(start_vpn: VirtPageNum, end_vpn: VirtPageNum) -> isize {
+    TASK_MANAGER.remove_map_area(start_vpn, end_vpn)
 }
 
 /// Suspend the current 'Running' task and run the next task in task list.

@@ -128,8 +128,17 @@ pub fn sys_mmap(_start: usize, _len: usize, _port: usize) -> isize {
 
 // YOUR JOB: Implement munmap.
 pub fn sys_munmap(_start: usize, _len: usize) -> isize {
-    trace!("kernel: sys_munmap NOT IMPLEMENTED YET!");
-    -1
+    //* 可能的错误 */
+    //* start 没有按页大小对齐 */
+    if _start % PAGE_SIZE != 0 {
+        return -1;
+    }
+    // 创建一个新的内存区域
+    // 向上取整和向下取整
+    let start_vpn = VirtAddr::from(_start).floor();
+    let end_vpn = VirtAddr::from(_start + _len).ceil();
+    //* [start, start + len) 中存在未曾映射的页 */
+    remove_map_area(start_vpn, end_vpn)
 }
 /// change data segment size
 pub fn sys_sbrk(size: i32) -> isize {
