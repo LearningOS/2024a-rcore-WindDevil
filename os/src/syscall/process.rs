@@ -110,10 +110,10 @@ pub fn sys_mmap(_start: usize, _len: usize, _port: usize) -> isize {
     //* start 没有按页大小对齐 */
     //* port & !0x7 != 0 (port 其余位必须为0) */
     //* port & 0x7 = 0 (这样的内存无意义) */
-    //* [start, start + len) 中存在已经被映射的页 */
     if _start % PAGE_SIZE != 0 ||
-        _port & !0x07 == 0 ||
-        _port & 0x07 == 0 {
+        _port & !0x7 != 0 ||
+        _port & 0x7 == 0 {
+        error!("sys_mmap: invalid arguments");
         return -1;
     }
     // 这里使用from_bits_truncate是因为我们的flag中有未知的bit,所以不能使用from_bits
@@ -123,6 +123,7 @@ pub fn sys_mmap(_start: usize, _len: usize, _port: usize) -> isize {
     let start_vpn = VirtAddr::from(_start).floor();
     let end_vpn = VirtAddr::from(_start + _len).ceil();
     // 调用task模块的函数
+    //* [start, start + len) 中存在已经被映射的页 */
     create_new_map_area(start_vpn, end_vpn, permission);
     0
 }

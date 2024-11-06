@@ -17,8 +17,8 @@ mod task;
 /// 引入系统调用的最大数量
 use crate::config::MAX_SYSCALL_NUM;
 use crate::loader::{get_app_data, get_num_app};
-/// 引入页表项和虚拟页号
-use crate::mm::{MapPermission, PageTableEntry, VPNRange, VirtPageNum};
+/// 引入虚拟页号
+use crate::mm::{MapPermission, VPNRange, VirtPageNum};
 use crate::sync::UPSafeCell;
 /// 引入获取时间的函数,注意题目要求是毫秒级别
 use crate::timer::get_time_ms;
@@ -205,8 +205,6 @@ impl TaskManager {
                 if pte.is_valid() {
                     return false;
                 }
-            } else {
-                return false;
             }
         }
         true
@@ -215,6 +213,7 @@ impl TaskManager {
     /// 创建一个新的连续内存区域
     fn create_new_map_area(&self, start_vpn: VirtPageNum, end_vpn: VirtPageNum, permission:MapPermission) -> isize {
         if !self.check_alloc_map_area(start_vpn, end_vpn) {
+            error!("can't alloc map area");
             return -1;
         }
         let mut inner = self.inner.exclusive_access();
