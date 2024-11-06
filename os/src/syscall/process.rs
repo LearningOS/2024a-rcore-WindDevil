@@ -113,7 +113,6 @@ pub fn sys_mmap(_start: usize, _len: usize, _port: usize) -> isize {
     if _start % PAGE_SIZE != 0 ||
         _port & !0x7 != 0 ||
         _port & 0x7 == 0 {
-        error!("sys_mmap: invalid arguments");
         return -1;
     }
     // 这里使用from_bits_truncate是因为我们的flag中有未知的bit,所以不能使用from_bits

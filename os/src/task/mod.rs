@@ -213,7 +213,6 @@ impl TaskManager {
     /// 创建一个新的连续内存区域
     fn create_new_map_area(&self, start_vpn: VirtPageNum, end_vpn: VirtPageNum, permission:MapPermission) -> isize {
         if !self.check_alloc_map_area(start_vpn, end_vpn) {
-            error!("can't alloc map area");
             return -1;
         }
         let mut inner = self.inner.exclusive_access();
