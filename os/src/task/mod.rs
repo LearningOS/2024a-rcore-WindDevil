@@ -243,9 +243,9 @@ pub fn get_current_task_first_start_time() -> usize {
     TASK_MANAGER.get_current_task_first_start_time()
 }
 
-/// 获取当前任务的页表
-pub fn get_current_task_page_table() -> &'static PageTable {
-
+/// 用当前任务的页表查询页表项
+pub fn get_current_task_pte(vpn:VirtPageNum) -> Option<PageTableEntry> {
+    TASK_MANAGER.get_current_task_pte(vpn)
 }
 
 /// Suspend the current 'Running' task and run the next task in task list.

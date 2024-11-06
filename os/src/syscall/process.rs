@@ -106,6 +106,11 @@ pub fn sys_task_info(_ti: *mut TaskInfo) -> isize {
 //* @_port 第 0 位表示是否可读，第 1 位表示是否可写，第 2 位表示是否可执行。其他位无效且必须为 0
 //* @return 成功返回 0，失败返回 -1
 pub fn sys_mmap(_start: usize, _len: usize, _port: usize) -> isize {
+    //* 可能的错误 */
+    //* start 没有按页大小对齐 */
+    //* port & !0x7 != 0 (port 其余位必须为0) */
+    //* port & 0x7 = 0 (这样的内存无意义) */
+    //* [start, start + len) 中存在已经被映射的页 */
     if _start % PAGE_SIZE != 0 ||
         _port & !0x07 == 0 ||
         _port & 0x07 == 0 {
@@ -114,9 +119,17 @@ pub fn sys_mmap(_start: usize, _len: usize, _port: usize) -> isize {
     // 这里使用from_bits_truncate是因为我们的flag中有未知的bit,所以不能使用from_bits
     let permission = MapPermission::from_bits_truncate((_port<<1) as u8)|MapPermission::U;
     // 创建一个新的内存区域
+    // 向上取整和向下取整
     let start_vpn = VirtAddr::from(_start).floor();
     let end_vpn = VirtAddr::from(_start + _len).ceil();
-    
+    let vpn_range = VPNRange::new(start_vpn, end_vpn);
+    // 判断物理内存是否不足
+
+    if let Some(pte) == get_current_task_pte(end_vpn) {
+        if pte.is_some() {
+            return -1;
+        }
+    }
 
     0
 }
