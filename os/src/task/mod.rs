@@ -18,7 +18,7 @@ mod task;
 use crate::config::MAX_SYSCALL_NUM;
 use crate::loader::{get_app_data, get_num_app};
 /// 引入页表项和虚拟页号
-use crate::mm::{VirtPageNum,PageTableEntry};
+use crate::mm::{MapPermission, PageTableEntry, VPNRange, VirtPageNum};
 use crate::sync::UPSafeCell;
 /// 引入获取时间的函数,注意题目要求是毫秒级别
 use crate::timer::get_time_ms;
@@ -194,10 +194,33 @@ impl TaskManager {
         inner.tasks[inner.current_task].task_first_start_time
     }
 
-    /// 用当前任务的页表翻译页表项
-    fn get_current_task_pte(&self,vpn:VirtPageNum) -> Option<PageTableEntry> {
+    /// 检查是否能够分配出当前虚拟内存的连续内存区域
+    fn check_alloc_map_area(&self, start_vpn: VirtPageNum, end_vpn: VirtPageNum) -> bool {
         let inner = self.inner.exclusive_access();
-        inner.tasks[inner.current_task].memory_set.translate(vpn)
+        let current = inner.current_task;
+        let memory_set = &inner.tasks[current].memory_set;
+        let vpn_range = VPNRange::new(start_vpn, end_vpn);
+        for vpn in vpn_range {
+            if let Some(pte) = memory_set.translate(vpn) {
+                if pte.is_valid() {
+                    return false;
+                }
+            } else {
+                return false;
+            }
+        }
+        true
+    }
+
+    /// 创建一个新的连续内存区域
+    fn create_new_map_area(&self, start_vpn: VirtPageNum, end_vpn: VirtPageNum, permission:MapPermission) -> isize {
+        if !self.check_alloc_map_area(start_vpn, end_vpn) {
+            return -1;
+        }
+        let mut inner = self.inner.exclusive_access();
+        let current = inner.current_task;
+        inner.tasks[current].memory_set.insert_framed_area(start_vpn.into(), end_vpn.into(), permission);
+        0
     }
 
 }
@@ -243,9 +266,9 @@ pub fn get_current_task_first_start_time() -> usize {
     TASK_MANAGER.get_current_task_first_start_time()
 }
 
-/// 用当前任务的页表查询页表项
-pub fn get_current_task_pte(vpn:VirtPageNum) -> Option<PageTableEntry> {
-    TASK_MANAGER.get_current_task_pte(vpn)
+/// 创建一个新的连续内存区域
+pub fn create_new_map_area(start_vpn: VirtPageNum, end_vpn: VirtPageNum, permission:MapPermission) -> isize {
+    TASK_MANAGER.create_new_map_area(start_vpn, end_vpn, permission)
 }
 
 /// Suspend the current 'Running' task and run the next task in task list.

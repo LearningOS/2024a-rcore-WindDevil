@@ -122,15 +122,8 @@ pub fn sys_mmap(_start: usize, _len: usize, _port: usize) -> isize {
     // 向上取整和向下取整
     let start_vpn = VirtAddr::from(_start).floor();
     let end_vpn = VirtAddr::from(_start + _len).ceil();
-    let vpn_range = VPNRange::new(start_vpn, end_vpn);
-    // 判断物理内存是否不足
-
-    if let Some(pte) == get_current_task_pte(end_vpn) {
-        if pte.is_some() {
-            return -1;
-        }
-    }
-
+    // 调用task模块的函数
+    create_new_map_area(start_vpn, end_vpn, permission);
     0
 }
 

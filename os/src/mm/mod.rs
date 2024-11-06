@@ -13,7 +13,9 @@ mod memory_set;
 mod page_table;
 
 pub use address::{PhysAddr, PhysPageNum, VirtAddr, VirtPageNum};
-use address::{StepByOne, VPNRange};
+/// 把VPNRange改为公有
+pub use address::VPNRange;
+use address::StepByOne;
 pub use frame_allocator::{frame_alloc, FrameTracker};
 pub use memory_set::remap_test;
 pub use memory_set::{kernel_stack_position, MapPermission, MemorySet, KERNEL_SPACE};
