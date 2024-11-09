@@ -8,7 +8,7 @@ use crate::{
     task::{
         add_task, current_task, current_user_token, exit_current_and_run_next,
         suspend_current_and_run_next, TaskStatus,
-    }, timer::get_time_us,
+    }, timer::{get_time_us,get_time_ms},
 };
 
 #[repr(C)]
@@ -143,6 +143,13 @@ pub fn sys_get_time(_ts: *mut TimeVal, _tz: usize) -> isize {
     0
 }
 
+/// 记录当前任务的系统调用次数
+pub fn sys_record_syscall(syscall_id: usize) -> isize {
+    let current_task = current_task().unwrap();
+    current_task.record_syscall(syscall_id);
+    0
+}
+
 /// YOUR JOB: Finish sys_task_info to pass testcases
 /// HINT: You might reimplement it with virtual memory management.
 /// HINT: What if [`TaskInfo`] is splitted by two pages ?
@@ -151,7 +158,26 @@ pub fn sys_task_info(_ti: *mut TaskInfo) -> isize {
         "kernel:pid[{}] sys_task_info NOT IMPLEMENTED",
         current_task().unwrap().pid.0
     );
-    -1
+    let current_task = current_task().unwrap();
+    let task_info = TaskInfo {
+        status: current_task.get_status(),
+        syscall_times: current_task.get_syscall_times(),
+        time: get_time_ms() - current_task.get_first_scheduled_time(),
+    };
+    //* 奇妙的跳过不允许直接转换的操作 */
+    //? 从ref只能转换为自己类型的const裸指针 
+    let src = &task_info as *const TaskInfo;
+    //? const裸指针可以转换为任何类型
+    let mut src = src as usize;
+    //* 奇妙的跳过不允许直接转换的操作 */
+    let dst_vec = translated_byte_buffer(current_user_token(), _ti as *const u8, core::mem::size_of::<TaskInfo>());
+    for dst in dst_vec {
+        unsafe {
+            core::ptr::copy_nonoverlapping(src as *mut u8, dst.as_mut_ptr(), dst.len());
+            src += dst.len();
+        }
+    }
+    0
 }
 
 //* 申请长度为 len 字节的物理内存（不要求实际物理内存位置，可以随便找一块），将其映射到 start 开始的虚存，内存页属性为 port
