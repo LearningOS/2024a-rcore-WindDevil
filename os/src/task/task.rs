@@ -77,6 +77,9 @@ pub struct TaskControlBlockInner {
 
     /// 优先级
     pub priority: isize,
+
+    /// stride
+    pub stride: usize,
 }
 
 impl TaskControlBlockInner {
@@ -131,6 +134,8 @@ impl TaskControlBlock {
                     syscall_times: [0; MAX_SYSCALL_NUM],
                     // 进程初始化时的优先级为16
                     priority: 16,
+                    // 进程初始化时的stride为0
+                    stride: 0,
                 })
             },
         };
@@ -207,6 +212,7 @@ impl TaskControlBlock {
                     first_scheduled_time: None,
                     syscall_times: [0; MAX_SYSCALL_NUM],
                     priority: parent_inner.priority,
+                    stride: parent_inner.stride,
                 })
             },
         });
@@ -254,6 +260,7 @@ impl TaskControlBlock {
                     first_scheduled_time: None,
                     syscall_times: [0; MAX_SYSCALL_NUM],
                     priority: parent_inner.priority,
+                    stride: parent_inner.stride,
                 })
             },
         });
@@ -378,6 +385,22 @@ impl TaskControlBlock {
     pub fn set_priority(&self, priority: isize) {
         let mut inner = self.inner_exclusive_access();
         inner.priority = priority;
+    }
+
+    /// 获取优先级
+    pub fn get_priority(&self) -> isize {
+        self.inner_exclusive_access().priority
+    }
+
+    /// 设置stride
+    pub fn add_stride(&self, add_stride: usize) {
+        let mut inner = self.inner_exclusive_access();
+        inner.stride += add_stride;
+    }
+
+    /// 获取stride
+    pub fn get_stride(&self) -> usize {
+        self.inner_exclusive_access().stride
     }
 
 }
