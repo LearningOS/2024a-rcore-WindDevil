@@ -2,7 +2,7 @@
 use super::TaskContext;
 use super::{kstack_alloc, pid_alloc, KernelStack, PidHandle};
 use crate::config::TRAP_CONTEXT_BASE;
-use crate::mm::{MemorySet, PhysPageNum, VirtAddr, KERNEL_SPACE};
+use crate::mm::{MapPermission, MemorySet, PhysPageNum, VPNRange, VirtAddr, VirtPageNum, KERNEL_SPACE};
 use crate::sync::UPSafeCell;
 use crate::trap::{trap_handler, TrapContext};
 use alloc::sync::{Arc, Weak};
@@ -289,6 +289,49 @@ impl TaskControlBlock {
             None
         }
     }
+    
+    /// 检查是否能够分配出当前虚拟内存的连续内存区域
+    fn check_alloc_map_area(&self, start_vpn: VirtPageNum, end_vpn: VirtPageNum) -> bool {
+        let inner = self.inner.exclusive_access();
+        let memory_set = &inner.memory_set;
+        let vpn_range = VPNRange::new(start_vpn, end_vpn);
+        for vpn in vpn_range {
+            if let Some(pte) = memory_set.translate(vpn) {
+                if pte.is_valid() {
+                    return false;
+                }
+            }
+        }
+        true
+    }
+    /// 创建一个新的连续内存区域
+    pub fn create_new_map_area(&self, start_vpn: VirtPageNum, end_vpn: VirtPageNum, permission:MapPermission) -> isize {
+        if !self.check_alloc_map_area(start_vpn, end_vpn) {
+            return -1;
+        }
+        let mut inner = self.inner.exclusive_access();
+        let memory_set = &mut inner.memory_set;
+        memory_set.insert_framed_area(start_vpn.into(), end_vpn.into(), permission);
+        0
+    }
+
+    /// 释放一个连续内存区域
+    pub fn remove_map_area(&self, start_vpn: VirtPageNum, end_vpn: VirtPageNum) -> isize {
+        let mut inner = self.inner.exclusive_access();
+        let memory_set = &mut inner.memory_set;
+        let page_table = memory_set.get_page_table();
+        let vpn_range = VPNRange::new(start_vpn, end_vpn);
+        for vpn in vpn_range {
+            if let Some(pte) = page_table.translate(vpn) {
+                if !pte.is_valid() {
+                   return -1;
+                }
+                page_table.unmap(vpn);
+            }
+        }
+        0
+    }
+
 }
 
 #[derive(Copy, Clone, PartialEq)]

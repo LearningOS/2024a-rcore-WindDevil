@@ -2,9 +2,9 @@
 use alloc::sync::Arc;
 
 use crate::{
-    config::MAX_SYSCALL_NUM,
+    config::{MAX_SYSCALL_NUM, PAGE_SIZE},
     loader::get_app_data_by_name,
-    mm::{translated_refmut, translated_str},
+    mm::{translated_refmut, translated_str, MapPermission, VirtAddr},
     task::{
         add_task, current_task, current_user_token, exit_current_and_run_next,
         suspend_current_and_run_next, TaskStatus,
@@ -136,22 +136,47 @@ pub fn sys_task_info(_ti: *mut TaskInfo) -> isize {
     -1
 }
 
-/// YOUR JOB: Implement mmap.
+//* 申请长度为 len 字节的物理内存（不要求实际物理内存位置，可以随便找一块），将其映射到 start 开始的虚存，内存页属性为 port
+//* @_start 需要映射的虚存起始地址，要求按页对齐
+//* @_len 映射字节长度，可以为 0
+//* @_port 第 0 位表示是否可读，第 1 位表示是否可写，第 2 位表示是否可执行。其他位无效且必须为 0
+//* @return 成功返回 0，失败返回 -1
 pub fn sys_mmap(_start: usize, _len: usize, _port: usize) -> isize {
-    trace!(
-        "kernel:pid[{}] sys_mmap NOT IMPLEMENTED",
-        current_task().unwrap().pid.0
-    );
-    -1
+    //* 可能的错误 */
+    //* start 没有按页大小对齐 */
+    //* port & !0x7 != 0 (port 其余位必须为0) */
+    //* port & 0x7 = 0 (这样的内存无意义) */
+    if _start % PAGE_SIZE != 0 ||
+        _port & !0x7 != 0 ||
+        _port & 0x7 == 0 {
+        return -1;
+    }
+    // 这里使用from_bits_truncate是因为我们的flag中有未知的bit,所以不能使用from_bits
+    let permission = MapPermission::from_bits_truncate((_port<<1) as u8)|MapPermission::U;
+    // 创建一个新的内存区域
+    // 向上取整和向下取整
+    let start_vpn = VirtAddr::from(_start).floor();
+    let end_vpn = VirtAddr::from(_start + _len).ceil();
+    // 调用task模块的函数
+    //* [start, start + len) 中存在已经被映射的页 */
+    let current_task = current_task().unwrap();
+    current_task.create_new_map_area(start_vpn, end_vpn, permission)
 }
 
-/// YOUR JOB: Implement munmap.
+// YOUR JOB: Implement munmap.
 pub fn sys_munmap(_start: usize, _len: usize) -> isize {
-    trace!(
-        "kernel:pid[{}] sys_munmap NOT IMPLEMENTED",
-        current_task().unwrap().pid.0
-    );
-    -1
+    //* 可能的错误 */
+    //* start 没有按页大小对齐 */
+    if _start % PAGE_SIZE != 0 {
+        return -1;
+    }
+    // 创建一个新的内存区域
+    // 向上取整和向下取整
+    let start_vpn = VirtAddr::from(_start).floor();
+    let end_vpn = VirtAddr::from(_start + _len).ceil();
+    //* [start, start + len) 中存在未曾映射的页 */
+    let current_task = current_task().unwrap();
+    current_task.remove_map_area(start_vpn, end_vpn)
 }
 
 /// change data segment size
