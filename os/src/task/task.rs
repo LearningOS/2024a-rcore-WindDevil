@@ -74,6 +74,9 @@ pub struct TaskControlBlockInner {
 
     /// 任务被不同的syscall调用的次数
     pub syscall_times: [u32; MAX_SYSCALL_NUM],
+
+    /// 优先级
+    pub priority: isize,
 }
 
 impl TaskControlBlockInner {
@@ -126,6 +129,8 @@ impl TaskControlBlock {
                     program_brk: user_sp,
                     first_scheduled_time: None,
                     syscall_times: [0; MAX_SYSCALL_NUM],
+                    // 进程初始化时的优先级为16
+                    priority: 16,
                 })
             },
         };
@@ -201,6 +206,7 @@ impl TaskControlBlock {
                     program_brk: parent_inner.program_brk,
                     first_scheduled_time: None,
                     syscall_times: [0; MAX_SYSCALL_NUM],
+                    priority: parent_inner.priority,
                 })
             },
         });
@@ -247,6 +253,7 @@ impl TaskControlBlock {
                     program_brk: parent_inner.program_brk,
                     first_scheduled_time: None,
                     syscall_times: [0; MAX_SYSCALL_NUM],
+                    priority: parent_inner.priority,
                 })
             },
         });
@@ -365,6 +372,12 @@ impl TaskControlBlock {
             }
         }
         0
+    }
+
+    /// 设置优先级
+    pub fn set_priority(&self, priority: isize) {
+        let mut inner = self.inner_exclusive_access();
+        inner.priority = priority;
     }
 
 }
