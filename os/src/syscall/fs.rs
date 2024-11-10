@@ -93,11 +93,11 @@ pub fn sys_fstat(_fd: usize, _st: *mut Stat) -> isize {
     if inner.fd_table[_fd].is_none() {
         return -1;
     }
-
+    //* 前边的代码都没问题 */
     let ino: u64;
     let nlink: u32;
     if let Some(file_node) = &inner.fd_table[_fd] {
-        let any: &dyn Any = file_node;
+        let any: &dyn Any = file_node.as_any();
         let os_node = any.downcast_ref::<OSInode>().unwrap();
         ino = os_node.get_inode_id();
         let (block_id, block_offset) = os_node.get_inode_pos();

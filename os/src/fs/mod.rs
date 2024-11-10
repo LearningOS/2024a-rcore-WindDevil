@@ -5,8 +5,20 @@ mod stdio;
 
 use crate::mm::UserBuffer;
 
+use core::any::Any;
+/// convert current type to &dyn Any
+pub trait AnyConvertor {
+    /// convert current type to &dyn Any
+    fn as_any(&self) -> &dyn Any;
+}
+impl<T: 'static> AnyConvertor for T {
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+}
+
 /// trait File for all file types
-pub trait File: Send + Sync {
+pub trait File: Send + Sync + AnyConvertor {
     /// the file readable?
     fn readable(&self) -> bool;
     /// the file writable?
