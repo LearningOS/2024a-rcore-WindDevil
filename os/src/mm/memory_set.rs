@@ -318,6 +318,11 @@ impl MemorySet {
             false
         }
     }
+    
+    /// 增加一个获取页表的函数
+    pub fn get_page_table(&mut self) -> &mut PageTable {
+        &mut self.page_table
+    }    
 }
 /// map area structure, controls a contiguous piece of virtual memory
 pub struct MapArea {

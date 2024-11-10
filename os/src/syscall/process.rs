@@ -3,13 +3,13 @@
 use alloc::sync::Arc;
 
 use crate::{
-    config::MAX_SYSCALL_NUM,
+    config::{MAX_SYSCALL_NUM, PAGE_SIZE},
     fs::{open_file, OpenFlags},
-    mm::{translated_refmut, translated_str},
+    mm::{translated_byte_buffer, translated_refmut, translated_str, MapPermission, VirtAddr},
     task::{
         add_task, current_task, current_user_token, exit_current_and_run_next,
         suspend_current_and_run_next, TaskStatus,
-    },
+    }, timer::{get_time_us,get_time_ms},
 };
 
 #[repr(C)]
@@ -122,7 +122,32 @@ pub fn sys_get_time(_ts: *mut TimeVal, _tz: usize) -> isize {
         "kernel:pid[{}] sys_get_time NOT IMPLEMENTED",
         current_task().unwrap().pid.0
     );
-    -1
+    let us = get_time_us();
+    let time_val = TimeVal {
+        sec: us / 1_000_000,
+        usec: us % 1_000_000,
+    };
+    //* 奇妙的跳过不允许直接转换的操作 */
+    //? 从ref只能转换为自己类型的const裸指针 
+    let src = &time_val as *const TimeVal;
+    //? const裸指针可以转换为任何类型
+    let mut src = src as usize;
+    //* 奇妙的跳过不允许直接转换的操作 */
+    let dst_vec = translated_byte_buffer(current_user_token(), _ts as *const u8, core::mem::size_of::<TimeVal>());
+    for dst in dst_vec {
+        unsafe {
+            core::ptr::copy_nonoverlapping(src as *mut u8, dst.as_mut_ptr(), dst.len());
+            src += dst.len();
+        }
+    }
+    0
+}
+
+/// 记录当前任务的系统调用次数
+pub fn sys_record_syscall(syscall_id: usize) -> isize {
+    let current_task = current_task().unwrap();
+    current_task.record_syscall(syscall_id);
+    0
 }
 
 /// YOUR JOB: Finish sys_task_info to pass testcases
@@ -133,25 +158,69 @@ pub fn sys_task_info(_ti: *mut TaskInfo) -> isize {
         "kernel:pid[{}] sys_task_info NOT IMPLEMENTED",
         current_task().unwrap().pid.0
     );
-    -1
+    let current_task = current_task().unwrap();
+    let task_info = TaskInfo {
+        status: current_task.get_status(),
+        syscall_times: current_task.get_syscall_times(),
+        time: get_time_ms() - current_task.get_first_scheduled_time(),
+    };
+    //* 奇妙的跳过不允许直接转换的操作 */
+    //? 从ref只能转换为自己类型的const裸指针 
+    let src = &task_info as *const TaskInfo;
+    //? const裸指针可以转换为任何类型
+    let mut src = src as usize;
+    //* 奇妙的跳过不允许直接转换的操作 */
+    let dst_vec = translated_byte_buffer(current_user_token(), _ti as *const u8, core::mem::size_of::<TaskInfo>());
+    for dst in dst_vec {
+        unsafe {
+            core::ptr::copy_nonoverlapping(src as *mut u8, dst.as_mut_ptr(), dst.len());
+            src += dst.len();
+        }
+    }
+    0
 }
 
-/// YOUR JOB: Implement mmap.
+//* 申请长度为 len 字节的物理内存（不要求实际物理内存位置，可以随便找一块），将其映射到 start 开始的虚存，内存页属性为 port
+//* @_start 需要映射的虚存起始地址，要求按页对齐
+//* @_len 映射字节长度，可以为 0
+//* @_port 第 0 位表示是否可读，第 1 位表示是否可写，第 2 位表示是否可执行。其他位无效且必须为 0
+//* @return 成功返回 0，失败返回 -1
 pub fn sys_mmap(_start: usize, _len: usize, _port: usize) -> isize {
-    trace!(
-        "kernel:pid[{}] sys_mmap NOT IMPLEMENTED",
-        current_task().unwrap().pid.0
-    );
-    -1
+    //* 可能的错误 */
+    //* start 没有按页大小对齐 */
+    //* port & !0x7 != 0 (port 其余位必须为0) */
+    //* port & 0x7 = 0 (这样的内存无意义) */
+    if _start % PAGE_SIZE != 0 ||
+        _port & !0x7 != 0 ||
+        _port & 0x7 == 0 {
+        return -1;
+    }
+    // 这里使用from_bits_truncate是因为我们的flag中有未知的bit,所以不能使用from_bits
+    let permission = MapPermission::from_bits_truncate((_port<<1) as u8)|MapPermission::U;
+    // 创建一个新的内存区域
+    // 向上取整和向下取整
+    let start_vpn = VirtAddr::from(_start).floor();
+    let end_vpn = VirtAddr::from(_start + _len).ceil();
+    // 调用task模块的函数
+    //* [start, start + len) 中存在已经被映射的页 */
+    let current_task = current_task().unwrap();
+    current_task.create_new_map_area(start_vpn, end_vpn, permission)
 }
 
-/// YOUR JOB: Implement munmap.
+// YOUR JOB: Implement munmap.
 pub fn sys_munmap(_start: usize, _len: usize) -> isize {
-    trace!(
-        "kernel:pid[{}] sys_munmap NOT IMPLEMENTED",
-        current_task().unwrap().pid.0
-    );
-    -1
+    //* 可能的错误 */
+    //* start 没有按页大小对齐 */
+    if _start % PAGE_SIZE != 0 {
+        return -1;
+    }
+    // 创建一个新的内存区域
+    // 向上取整和向下取整
+    let start_vpn = VirtAddr::from(_start).floor();
+    let end_vpn = VirtAddr::from(_start + _len).ceil();
+    //* [start, start + len) 中存在未曾映射的页 */
+    let current_task = current_task().unwrap();
+    current_task.remove_map_area(start_vpn, end_vpn)
 }
 
 /// change data segment size
@@ -171,7 +240,16 @@ pub fn sys_spawn(_path: *const u8) -> isize {
         "kernel:pid[{}] sys_spawn NOT IMPLEMENTED",
         current_task().unwrap().pid.0
     );
-    -1
+    let token = current_user_token();
+    let path = translated_str(token, _path);
+    if let Some(app_inode) = open_file(path.as_str(), OpenFlags::RDONLY) {
+        let all_data = app_inode.read_all();
+        let task = current_task().unwrap();
+        task.spawn(all_data.as_slice());
+        0
+    } else {
+        -1
+    }
 }
 
 // YOUR JOB: Set task priority.
@@ -180,5 +258,11 @@ pub fn sys_set_priority(_prio: isize) -> isize {
         "kernel:pid[{}] sys_set_priority NOT IMPLEMENTED",
         current_task().unwrap().pid.0
     );
-    -1
+    // _prio必须大于等于2
+    if _prio < 2 {
+        return -1;
+    }
+    let current_task = current_task().unwrap();
+    current_task.set_priority(_prio);
+    _prio
 }
